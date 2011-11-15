@@ -9,7 +9,6 @@ import shutil
 
 # CONSTANTS
 app_name = "cbuilder"
-cur_dir = os.getcwd ()
 
 # execute command, return 0 if success
 def exec_cmd (cmd_path):
@@ -262,11 +261,11 @@ def unistall_projects ():
 
 def show_help ():
     print ("Usage: ")
-    print ("      ", sys.argv[0], " [help | list | init | build | unistall] (project1 project2 .. )")
-    print ("      ", "list - list all available projects")
-    print ("      ", "init - init git / svn repositories for specified projects")
-    print ("      ", "build - build all or only specified projects")
-    print ("      ", "unistall - remove specified projects files")
+    print ("\t", sys.argv[0], " [help | list | init | build | unistall] (project1 project2 .. )")
+    print ("\t", "list - list all available projects")
+    print ("\t", "init - init git / svn repositories for specified projects")
+    print ("\t", "build - build all or only specified projects")
+    print ("\t", "unistall - remove specified projects files")
 
 
 

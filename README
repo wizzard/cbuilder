@@ -1,3 +1,18 @@
 
 A simple package manager for the single purpose:
 to organize enviorment with the latest available development versions of software.
+Builds are done out of source tree.
+
+
+Supported VCS:
+* svn
+* git
+
+
+Configuration file:
+~/.cbuilder/cbuilder.cfg
+
+
+Steps:
+
+1) Init repository
