@@ -122,9 +122,13 @@ class MainApp (object):
 
     def install_projects (self):
         None
+    
+    def print_projects (self, project):
+        print (project['name'], ' => ', project['deps'])
 
     def list_projects (self):
-        None
+        for i in projects_list:
+            print_project (i)
 
     def print_projects (self):
         None
