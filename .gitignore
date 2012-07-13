@@ -1,0 +1,5 @@
+.objs
+.update
+*.un~
+*.dia~
+*.swp
