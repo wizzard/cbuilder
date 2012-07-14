@@ -125,7 +125,7 @@ class MainApp ():
 
     
     def print_project (self, project):
-        print (project['name'], ' => ', project['deps'])
+        print ("%s => %d %s", project['name'], project['cbuilder_ver'],  project['deps'])
 
     def list_projects (self):
         self.load_projects_list ()
