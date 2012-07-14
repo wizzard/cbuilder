@@ -9,23 +9,25 @@ import shutil
 import argparse
 
 # CONSTANTS
-build_dir_t = "/home/dev/tmp/"
-project_dir_t = "/home/dev/svn/"
-install_dir = "/home/dev/work/"
-config_dir = "/home/dev/.cbuilder/projects/"
-output_stdout = 1
-app_ver = 1
+cbuilder_ver = 1
 
-class MainApp (object):
+class MainApp ():
     def __init__(self, args):
         self.projects = None
         self.cfg = None
+        self.projects_list = []
         self.args = args
+        self.load_cfg ()
 
+    def load_cfg (self):
+        fname = os.path.expanduser (args.cfg)
+        f = open (fname)
+        self.cfg = yaml.load (f)
+        f.close ()
 
     def exec_cmd (self, cmd_path):
         log.debug ("Executing: %s", cmd_path)
-        if output_stdout == 0:
+        if self.cfg["output_stdout"] == 0:
             tmp_out = tempfile.NamedTemporaryFile (delete=True)
         else:
             tmp_out = None
@@ -38,13 +40,10 @@ class MainApp (object):
             log.error ("Execution failed: ", e)
             retcode = 1
 
-        if output_stdout == 0:
+        if self.cfg["output_stdout"] == 0:
             tmp_out.close ()
 
         return retcode
-
-    def load_cfg (self):
-        None
 
     def install_project (self, project):
         log.debug ("Building %s", project["name"])
@@ -68,79 +67,84 @@ class MainApp (object):
         if (os.path.isdir (project_dir)):
             log.debug ("Project found, running update")
             os.chdir (project_dir)
-            exec_cmd ("make distclean")
-            exec_cmd (project["update"])
+            self.exec_cmd ("make distclean")
+            self.exec_cmd (project["update"])
         else:
             log.debug ("Project not found, initializing")
             os.chdir (project_dir_t);
-            exec_cmd (project["init"])
+            self.exec_cmd (project["init"])
             os.chdir (project_dir)
 
         if any ("automake" in s for s in project["extra"]):
             log.debug ("Running automake");
-            exec_cmd ("sh autogen.sh")
+            self.exec_cmd ("sh autogen.sh")
         
         os.chdir (build_dir)
-        exec_cmd (configure)
-        if (exec_cmd (make) != 0):
+        self.exec_cmd (configure)
+        if (self.exec_cmd (make) != 0):
             log.debug ("Build failes !")
 
-        exec_cmd (make_install)
+        self.exec_cmd (make_install)
+    
+    def install_projects (self):
+        self.load_projects_list ()
+        for i in self.args.projects:
+            self.install_project (i)
 
     def load_poject (self, project_name):
         fname = config_dir + project_name + ".cfg"
         f = open (fname)
         project = yaml.load (f)
         f.close ()
-        if (project["ver"] != app_ver):
-            log.error ("Project cfg version doesn't match app version: %s", project["ver"])
+        if (project["cbuilder_ver"] != cbuilder_ver):
+            log.error ("Project cfg version doesn't match app version: %s", project["cbuilder_ver"])
             return
 
         return project
-    
-    def create_projects_list (self):
 
+    def load_projects_list (self):
         # go through projects config files
-        flist = glob.glob (scripts_dir + '*.cfg')
-        
+        flist = glob.glob (self.cfg["config_dir"] + '*.cfg')
+        print (self.cfg["config_dir"] )
+        print (flist)
         # load project
         for fname in flist:
             f = open (fname)
             project = yaml.load (f)
             f.close ()
-            projects_list.append (project)
+            self.projects_list.append (project)
         
         # bubble sort for dependencies
-        for i in range (0, len (projects_list)):
-            for j in range (0, len (projects_list)):
-                
-                for k in projects_list[j]["deps"]:
-                    if (k == projects_list[i]["name"]):
-                        tmp = projects_list[i]
-                        projects_list[i] = projects_list[j]
-                        projects_list[j] = tmp
+        for i in range (0, len (self.projects_list)):
+            for j in range (0, len (self.projects_list)):
+                for k in self.projects_list[j]["deps"]:
+                    if (k == self.projects_list[i]["name"]):
+                        tmp = self.projects_list[i]
+                        self.projects_list[i] = self.projects_list[j]
+                        self.projects_list[j] = tmp
 
-    def install_projects (self):
-        None
     
-    def print_projects (self, project):
+    def print_project (self, project):
         print (project['name'], ' => ', project['deps'])
 
     def list_projects (self):
-        for i in projects_list:
-            print_project (i)
-
-    def print_projects (self):
-        None
+        self.load_projects_list ()
+        for i in self.projects_list:
+            self.print_project (i)
 
     def sync_projects (self):
+        shutil.rmtree (self.cfg["config_dir"], ignore_errors=True)
+        os.makedirs (self.cfg["config_dir"])
+        os.chdir (self.cfg["config_dir"])
+        self.exec_cmd ("git clone git://github.com/wizzard/cbuilder.git/");
+        self.exec_cmd ("mv cbuilder/scripts/* .")
+        self.exec_cmd ("rm -fr cbuilder/")
         None
 
 
 commands_d = {
     'install': MainApp.install_projects,
     'list': MainApp.list_projects,
-    'info': MainApp.print_projects,
     'sync': MainApp.sync_projects,
 }
 
@@ -177,9 +181,9 @@ if __name__ == '__main__':
         log.setLevel (logging.DEBUG)
 
     # parse command line
-    if (len (args.projects) < 2 or args.projects[0] not in commands_d):
+    if (len (args.projects) < 1 or args.projects[0] not in commands_d):
         parser.print_help ()
         sys.exit (1)
 
     f = commands_d[args.projects[0]]
-    f (MainApp)
+    f (app)
