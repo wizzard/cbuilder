@@ -10,6 +10,7 @@ import argparse
 
 # CONSTANTS
 cbuilder_ver = 1
+version_keys = ("cbuilder_ver", "name", "path", "flags", "init", "update", "deps", "extra")
 
 class MainApp ():
     def __init__(self, args):
@@ -27,6 +28,7 @@ class MainApp ():
 
     def exec_cmd (self, cmd_path):
         log.debug ("Executing: %s", cmd_path)
+        return 1
         if self.cfg["output_stdout"] == 0:
             tmp_out = tempfile.NamedTemporaryFile (delete=True)
         else:
@@ -48,15 +50,16 @@ class MainApp ():
     def install_project (self, project):
         log.debug ("Building %s", project["name"])
 
-        build_dir = build_dir_t + project["path"]
+        build_dir = self.cfg["build_dir_t"] + project["path"]
         log.debug ("Build dir %s", build_dir)
-        project_dir = project_dir_t + project["path"]
+        project_dir = self.cfg["project_dir_t"] + project["path"]
         log.debug ("Project dir %s", project_dir)
         config_path = project_dir + "/configure"
-        configure = config_path + " --prefix=" + install_dir + " " + project["flags"]
+        configure = config_path + " --prefix=" + self.cfg["install_dir"] + " " + project["flags"]
         log.debug ("Config %s", configure)
         make = "make -j5"
         make_install = make + " install"
+        ldconfig = "/sbin/ldconfig -N -n " + self.cfg["install_dir"] + "lib"
 
         if any ("sudo" in s for s in project["extra"]):
             make_install = "sudo " + make_install
@@ -71,7 +74,7 @@ class MainApp ():
             self.exec_cmd (project["update"])
         else:
             log.debug ("Project not found, initializing")
-            os.chdir (project_dir_t);
+            os.chdir (self.cfg["project_dir_t"]);
             self.exec_cmd (project["init"])
             os.chdir (project_dir)
 
@@ -80,25 +83,47 @@ class MainApp ():
             self.exec_cmd ("sh autogen.sh")
         
         os.chdir (build_dir)
+        log.debug ("Executing config script: %s", configure)
         self.exec_cmd (configure)
+        log.debug ("Executing make: %s", make)
         if (self.exec_cmd (make) != 0):
             log.debug ("Build failes !")
 
+        log.debug ("Installing: %s", make_install)
         self.exec_cmd (make_install)
+
+        log.debug ("Executing ldconfig: %s", ldconfig)
+        self.exec_cmd (ldconfig)
+
     
     def install_projects (self):
-        self.load_projects_list ()
-        for i in self.args.projects:
-            self.install_project (i)
+        if not self.load_projects_list ():
+            return
 
+        cmd = self.args.projects.pop (0)
+        for i in self.args.projects:
+            project = self.get_project (i)
+            self.install_project (project)
+    
+    def get_project (self, project_name):
+        for i in self.projects_list:
+            if (i["name"] == project_name):
+                return i
+        return None
+        
     def load_poject (self, project_name):
-        fname = config_dir + project_name + ".cfg"
-        f = open (fname)
+        f = open (project_name)
         project = yaml.load (f)
         f.close ()
+
+        for i in version_keys:
+            if not i in project:
+                log.error ("Key not found: %s", i)
+                return None
+            
         if (project["cbuilder_ver"] != cbuilder_ver):
             log.error ("Project cfg version doesn't match app version: %s", project["cbuilder_ver"])
-            return
+            return None
 
         return project
 
@@ -109,9 +134,9 @@ class MainApp ():
         print (flist)
         # load project
         for fname in flist:
-            f = open (fname)
-            project = yaml.load (f)
-            f.close ()
+            project = self.load_poject (fname)
+            if (project == None):
+                return
             self.projects_list.append (project)
         
         # bubble sort for dependencies
@@ -122,13 +147,16 @@ class MainApp ():
                         tmp = self.projects_list[i]
                         self.projects_list[i] = self.projects_list[j]
                         self.projects_list[j] = tmp
+        return True
 
     
     def print_project (self, project):
-        print ("%s => %d %s", project['name'], project['cbuilder_ver'],  project['deps'])
+        print (project['name'], ' => ver:', project['cbuilder_ver'], ' deps:', project['deps'])
 
     def list_projects (self):
-        self.load_projects_list ()
+        if not self.load_projects_list ():
+            return
+
         for i in self.projects_list:
             self.print_project (i)
 
