@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 import glob
 import yaml
 import os
@@ -12,6 +14,54 @@ import argparse
 cbuilder_ver = 1
 version_keys = ("cbuilder_ver", "name", "path", "flags", "init", "update", "deps", "extra")
 
+class TreeNode:
+    def __init__(self, name, obj, level = 0):
+        self.name = name
+        self.obj = obj
+        self.parent = None
+        self.children = []
+        self.level = level
+
+class Tree:
+    def __init__(self):
+        self.nodes = []
+        self.root = TreeNode ("root", None, 0)
+        self.nodes.append (self.root)
+
+    def add (self, name, obj = None, parent_name = None):
+        node = TreeNode (name, obj)
+        if parent_name == None:
+            parent_name = "root"
+
+        for i in self.nodes:
+            if i.name == parent_name:
+                i.children.append (node)
+                node.parent = i
+                node.level = i.level + 1
+
+        self.nodes.append (node)
+
+    def print (self, node=None):
+        if not node:
+            node = self.nodes[0]
+        if node.level > 0:
+            print ("\t"*node.level, "{0}".format (node.name))
+        for i in node.children:
+            self.print (i)
+    
+    def breadth_first (self, root):
+        if not root:
+            return
+        old = []
+        new = []
+        old.append (root)
+        while old:
+            for n in old:
+                print (n.name);
+                new += n.children
+            old = new
+            new = []
+
 class MainApp ():
     def __init__(self, args):
         self.projects = None
@@ -19,6 +69,7 @@ class MainApp ():
         self.projects_list = []
         self.args = args
         self.load_cfg ()
+        self.project_tree = Tree ()
 
     def load_cfg (self):
         fname = os.path.expanduser (args.cfg)
@@ -28,7 +79,6 @@ class MainApp ():
 
     def exec_cmd (self, cmd_path):
         log.debug ("Executing: %s", cmd_path)
-        return 1
         if self.cfg["output_stdout"] == 0:
             tmp_out = tempfile.NamedTemporaryFile (delete=True)
         else:
@@ -74,6 +124,7 @@ class MainApp ():
             self.exec_cmd (project["update"])
         else:
             log.debug ("Project not found, initializing")
+            os.makedirs (project_dir , exist_ok=True)
             os.chdir (self.cfg["project_dir_t"]);
             self.exec_cmd (project["init"])
             os.chdir (project_dir)
@@ -95,15 +146,26 @@ class MainApp ():
         log.debug ("Executing ldconfig: %s", ldconfig)
         self.exec_cmd (ldconfig)
 
-    
+    def install_project_list (self, project_list):
+        for i in project_list:
+            project = self.get_project (i)
+            if not project:
+                log.error ("Project %s not found !", i)
+                continue
+            
+            # install deps
+            if not self.args.nodeps:
+                self.install_project_list (project["deps"])
+
+            self.install_project (project)
+   
     def install_projects (self):
         if not self.load_projects_list ():
             return
 
-        cmd = self.args.projects.pop (0)
-        for i in self.args.projects:
-            project = self.get_project (i)
-            self.install_project (project)
+        self.args.projects.pop (0)
+        self.install_project_list (self.args.projects)
+
     
     def get_project (self, project_name):
         for i in self.projects_list:
@@ -130,14 +192,14 @@ class MainApp ():
     def load_projects_list (self):
         # go through projects config files
         flist = glob.glob (self.cfg["config_dir"] + '*.cfg')
-        print (self.cfg["config_dir"] )
-        print (flist)
         # load project
         for fname in flist:
             project = self.load_poject (fname)
             if (project == None):
                 return
             self.projects_list.append (project)
+
+        self.project_tree.add (project["name"], project, 
         
         # bubble sort for dependencies
         for i in range (0, len (self.projects_list)):
@@ -147,6 +209,7 @@ class MainApp ():
                         tmp = self.projects_list[i]
                         self.projects_list[i] = self.projects_list[j]
                         self.projects_list[j] = tmp
+
         return True
 
     
@@ -178,6 +241,28 @@ commands_d = {
 
 # main
 if __name__ == '__main__':
+    tree = Tree ()
+    tree.add ("test1")
+    tree.add ("test11", parent_name="test1")
+    tree.add ("test12", parent_name="test1")
+    tree.add ("test13", parent_name="test1")
+    tree.add ("test2")
+    tree.add ("test3")
+    tree.add ("test4")
+    tree.add ("test41", parent_name="test4")
+    tree.add ("test42", parent_name="test4")
+    tree.add ("test421", parent_name="test42")
+    tree.add ("test422", parent_name="test42")
+    tree.add ("test43", parent_name="test4")
+    tree.add ("test5")
+    tree.print ()
+
+    tree.breadth_first (tree.root)
+
+    sys.exit (1)
+
+    
+
     app_name = 'cbuilder';
 
     parser = argparse.ArgumentParser(prog=app_name,
